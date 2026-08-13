@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="pt-BR"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Oferta Play</title><link rel="stylesheet" href="/static/style.css">
+</head><body>
+<header><div class="logo">Oferta <span>Play</span></div><div class="sub">Produtos digitais com atendimento pelo WhatsApp</div></header>
+<section class="hero"><span class="pill">OFERTAS DIGITAIS</span><h1>Produtos digitais em poucos cliques</h1><p>Escolha seus produtos, adicione ao carrinho e envie o pedido pelo WhatsApp.</p></section>
+<main><div class="toolbar"><h2>Produtos</h2><button class="cart" onclick="openCart()">🛒 Carrinho <b id="count">0</b></button></div>
+<div class="grid">
+{% for p in products %}
+<article class="card"><div class="icon">{{p.icon}}</div><h3>{{p.name}}</h3><p>{{p.description}}</p><div class="price">R$ {{'%.2f'|format(p.price)|replace('.', ',')}}</div><button class="buy" onclick='add({{p.id|tojson}}, {{p.name|tojson}}, {{p.price}}, {{p.icon|tojson}})'>Adicionar ao carrinho</button></article>
+{% endfor %}
+</div></main>
+<div id="drawer" class="overlay hidden"><div class="drawer"><button class="close" onclick="closeCart()">×</button><h2>Seu carrinho</h2><div id="items"></div><div class="total">Total <strong id="total">R$ 0,00</strong></div><input id="name" placeholder="Seu nome"><input id="phone" placeholder="Seu WhatsApp"><button class="buy" onclick="checkout()">Finalizar pedido pelo WhatsApp</button><small>O pedido será registrado e enviado ao atendimento.</small></div></div>
+<footer>© 2026 Oferta Play • <a href="/admin/login">Área administrativa</a></footer>
+<script>
+let cart=[];
+const money=v=>v.toLocaleString('pt-BR',{style:'currency',currency:'BRL'});
+function add(id,name,price,icon){let x=cart.find(i=>i.id===id);if(x)x.quantity++;else cart.push({id,name,price,icon,quantity:1});render();openCart();}
+function render(){document.getElementById('count').textContent=cart.reduce((s,x)=>s+x.quantity,0);let box=document.getElementById('items');box.innerHTML=cart.length?cart.map((x,i)=>`<div class="row"><span>${x.icon} ${x.name}<small>${money(x.price)}</small></span><div><button onclick="qty(${i},-1)">−</button>${x.quantity}<button onclick="qty(${i},1)">+</button></div></div>`).join(''):'<p class="muted">Seu carrinho está vazio.</p>';document.getElementById('total').textContent=money(cart.reduce((s,x)=>s+x.price*x.quantity,0));}
+function qty(i,n){cart[i].quantity+=n;if(cart[i].quantity<=0)cart.splice(i,1);render();}
+function openCart(){document.getElementById('drawer').classList.remove('hidden');render()} function closeCart(){document.getElementById('drawer').classList.add('hidden')}
+async function checkout(){if(!cart.length)return alert('Adicione pelo menos um produto.');let name=document.getElementById('name').value.trim(),phone=document.getElementById('phone').value.trim();if(!name||!phone)return alert('Informe seu nome e WhatsApp.');let r=await fetch('/api/orders',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name,phone,items:cart.map(x=>({id:x.id,quantity:x.quantity}))})});let d=await r.json();if(!r.ok)return alert(d.error||'Não foi possível criar o pedido.');if(d.whatsapp_url)location.href=d.whatsapp_url;else alert('Pedido #'+d.order_id+' registrado. Configure WHATSAPP_NUMBER no Render para abrir o WhatsApp automaticamente.');}
+render();
+</script></body></html>

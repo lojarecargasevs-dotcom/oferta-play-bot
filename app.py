@@ -1,318 +1,207 @@
-from flask import Flask, render_template_string
 import os
+import sqlite3
+from functools import wraps
+from flask import Flask, render_template, request, redirect, url_for, session, jsonify, flash
 
 app = Flask(__name__)
+app.secret_key = os.environ.get("SECRET_KEY", "troque-esta-chave-no-render")
 
-# ============================================================
-# PRODUTOS DA OFERTA PLAY
-# Edite somente esta parte para alterar produtos e valores
-# ============================================================
+DB_PATH = os.environ.get("DB_PATH", "oferta_play.db")
+WHATSAPP = os.environ.get("WHATSAPP_NUMBER", "")  # Ex.: 5598999999999
+ADMIN_USER = os.environ.get("ADMIN_USER", "admin")
+ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "troque-a-senha")
 
-PRODUTOS = [
-    {
-        "nome": "Canva Pro",
-        "descricao": "Acesso Canva Pro por 30 dias",
-        "preco": 5.00,
-        "icone": "🎨"
-    },
-    {
-        "nome": "GPT Go",
-        "descricao": "Acesso ao GPT Go",
-        "preco": 10.00,
-        "icone": "🤖"
-    },
-    {
-        "nome": "Netflix Premium",
-        "descricao": "Tela Netflix Premium",
-        "preco": 12.00,
-        "icone": "🎬"
-    },
-    {
-        "nome": "Disney+",
-        "descricao": "Tela Disney+",
-        "preco": 7.00,
-        "icone": "🏰"
-    }
+DEFAULT_PRODUCTS = [
+    ("Canva Pro", "Acesso Canva Pro por 30 dias", 5.00, "🎨"),
+    ("GPT Go", "Acesso ao GPT Go", 10.00, "🤖"),
+    ("Netflix Premium", "Tela Netflix Premium", 12.00, "🎬"),
+    ("Disney+", "Tela Disney+", 7.00, "🏰"),
 ]
 
-WHATSAPP = "5598987894338"
-
-# ============================================================
-# PÁGINA PRINCIPAL
-# ============================================================
-
-HTML = """
-<!DOCTYPE html>
-<html lang="pt-BR">
-
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-
-    <title>Oferta Play</title>
-
-    <style>
-
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-            font-family: Arial, Helvetica, sans-serif;
-        }
-
-        body {
-            background: #080808;
-            color: white;
-        }
-
-        header {
-            background: linear-gradient(135deg, #16002b, #32005c);
-            padding: 25px 20px;
-            text-align: center;
-            border-bottom: 1px solid #5d1b91;
-        }
-
-        .logo {
-            font-size: 34px;
-            font-weight: 800;
-            color: #ffffff;
-        }
-
-        .logo span {
-            color: #a855f7;
-        }
-
-        .subtitulo {
-            margin-top: 8px;
-            color: #d1d1d1;
-            font-size: 15px;
-        }
-
-        .hero {
-            padding: 45px 20px 30px;
-            text-align: center;
-        }
-
-        .hero h1 {
-            font-size: 32px;
-            margin-bottom: 12px;
-        }
-
-        .hero p {
-            color: #aaa;
-            max-width: 600px;
-            margin: auto;
-            line-height: 1.6;
-        }
-
-        .produtos {
-            max-width: 1100px;
-            margin: auto;
-            padding: 20px;
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
-            gap: 20px;
-        }
-
-        .produto {
-            background: #111111;
-            border: 1px solid #292929;
-            border-radius: 18px;
-            padding: 25px;
-            text-align: center;
-            transition: 0.2s;
-        }
-
-        .produto:hover {
-            transform: translateY(-4px);
-            border-color: #8b3dca;
-        }
-
-        .icone {
-            font-size: 50px;
-            margin-bottom: 15px;
-        }
-
-        .produto h2 {
-            font-size: 21px;
-            margin-bottom: 10px;
-        }
-
-        .descricao {
-            color: #999;
-            min-height: 42px;
-            font-size: 14px;
-            line-height: 1.5;
-        }
-
-        .preco {
-            font-size: 30px;
-            font-weight: bold;
-            margin: 20px 0;
-            color: #c084fc;
-        }
-
-        .botao {
-            display: block;
-            background: #7c3aed;
-            color: white;
-            text-decoration: none;
-            padding: 13px;
-            border-radius: 10px;
-            font-weight: bold;
-            transition: 0.2s;
-        }
-
-        .botao:hover {
-            background: #9333ea;
-        }
-
-        .sobre {
-            max-width: 900px;
-            margin: 50px auto;
-            padding: 30px 20px;
-            text-align: center;
-        }
-
-        .sobre h2 {
-            margin-bottom: 15px;
-        }
-
-        .sobre p {
-            color: #999;
-            line-height: 1.7;
-        }
-
-        footer {
-            border-top: 1px solid #222;
-            text-align: center;
-            padding: 25px;
-            color: #777;
-            font-size: 13px;
-        }
-
-        @media (max-width: 600px) {
-
-            .hero h1 {
-                font-size: 27px;
-            }
-
-            .logo {
-                font-size: 29px;
-            }
-
-        }
-
-    </style>
-
-</head>
-
-<body>
-
-<header>
-
-    <div class="logo">
-        Oferta <span>Play</span>
-    </div>
-
-    <div class="subtitulo">
-        Produtos digitais com atendimento pelo WhatsApp
-    </div>
-
-</header>
-
-
-<section class="hero">
-
-    <h1>Escolha seu produto</h1>
-
-    <p>
-        Confira nossas ofertas e fale conosco pelo WhatsApp
-        para realizar seu pedido.
-    </p>
-
-</section>
-
-
-<section class="produtos">
-
-    {% for produto in produtos %}
-
-    <div class="produto">
-
-        <div class="icone">
-            {{ produto.icone }}
-        </div>
-
-        <h2>
-            {{ produto.nome }}
-        </h2>
-
-        <div class="descricao">
-            {{ produto.descricao }}
-        </div>
-
-        <div class="preco">
-            R$ {{ "%.2f"|format(produto.preco)|replace(".", ",") }}
-        </div>
-
-        <a
-            class="botao"
-            href="https://wa.me/{{ whatsapp }}?text=Olá!%20Tenho%20interesse%20no%20{{ produto.nome }}"
-            target="_blank"
-        >
-            Comprar pelo WhatsApp
-        </a>
-
-    </div>
-
-    {% endfor %}
-
-</section>
-
-
-<section class="sobre">
-
-    <h2>Oferta Play</h2>
-
-    <p>
-        Sua loja de produtos digitais.
-        Escolha uma oferta, clique no botão e fale diretamente
-        com nosso atendimento pelo WhatsApp.
-    </p>
-
-</section>
-
-
-<footer>
-
-    © 2026 Oferta Play — Todos os direitos reservados.
-
-</footer>
-
-</body>
-
-</html>
-"""
-
+def db():
+    conn = sqlite3.connect(DB_PATH)
+    conn.row_factory = sqlite3.Row
+    return conn
+
+def init_db():
+    conn = db()
+    conn.executescript("""
+    CREATE TABLE IF NOT EXISTS products (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL,
+        description TEXT NOT NULL,
+        price REAL NOT NULL,
+        icon TEXT DEFAULT '🛍️',
+        active INTEGER DEFAULT 1
+    );
+    CREATE TABLE IF NOT EXISTS orders (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        customer_name TEXT NOT NULL,
+        customer_phone TEXT NOT NULL,
+        total REAL NOT NULL,
+        status TEXT DEFAULT 'pending',
+        whatsapp_message TEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+    CREATE TABLE IF NOT EXISTS order_items (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        order_id INTEGER NOT NULL,
+        product_id INTEGER NOT NULL,
+        product_name TEXT NOT NULL,
+        price REAL NOT NULL,
+        quantity INTEGER NOT NULL,
+        FOREIGN KEY(order_id) REFERENCES orders(id)
+    );
+    """)
+    if conn.execute("SELECT COUNT(*) FROM products").fetchone()[0] == 0:
+        conn.executemany(
+            "INSERT INTO products(name,description,price,icon) VALUES(?,?,?,?)",
+            DEFAULT_PRODUCTS
+        )
+    conn.commit()
+    conn.close()
+
+init_db()
+
+def admin_required(fn):
+    @wraps(fn)
+    def wrapper(*args, **kwargs):
+        if not session.get("admin"):
+            return redirect(url_for("admin_login"))
+        return fn(*args, **kwargs)
+    return wrapper
 
 @app.route("/")
-def inicio():
-    return render_template_string(
-        HTML,
-        produtos=PRODUTOS,
-        whatsapp=WHATSAPP
+def index():
+    conn = db()
+    products = conn.execute(
+        "SELECT * FROM products WHERE active=1 ORDER BY id DESC"
+    ).fetchall()
+    conn.close()
+    return render_template("index.html", products=products)
+
+@app.route("/api/products")
+def api_products():
+    conn = db()
+    products = [dict(x) for x in conn.execute(
+        "SELECT * FROM products WHERE active=1 ORDER BY id DESC"
+    ).fetchall()]
+    conn.close()
+    return jsonify(products)
+
+@app.post("/api/orders")
+def create_order():
+    data = request.get_json(silent=True) or {}
+    name = (data.get("name") or "").strip()
+    phone = (data.get("phone") or "").strip()
+    items = data.get("items") or []
+    if not name or not phone or not items:
+        return jsonify({"error": "Informe nome, telefone e produtos."}), 400
+
+    conn = db()
+    total = 0
+    normalized = []
+    for item in items:
+        try:
+            pid, qty = int(item["id"]), max(1, int(item["quantity"]))
+        except Exception:
+            conn.close()
+            return jsonify({"error": "Carrinho inválido."}), 400
+        p = conn.execute("SELECT * FROM products WHERE id=? AND active=1", (pid,)).fetchone()
+        if not p:
+            conn.close()
+            return jsonify({"error": "Produto não encontrado."}), 400
+        total += p["price"] * qty
+        normalized.append((p, qty))
+
+    lines = [f"Olá! Quero fazer um pedido na Oferta Play.", f"Cliente: {name}", f"Telefone: {phone}", ""]
+    for p, qty in normalized:
+        lines.append(f"- {p['name']} x{qty}: R$ {p['price']*qty:.2f}".replace(".", ","))
+    lines += ["", f"Total: R$ {total:.2f}".replace(".", ",")]
+
+    cur = conn.execute(
+        "INSERT INTO orders(customer_name,customer_phone,total,status,whatsapp_message) VALUES(?,?,?,?,?)",
+        (name, phone, total, "pending", "\n".join(lines))
     )
+    oid = cur.lastrowid
+    for p, qty in normalized:
+        conn.execute(
+            "INSERT INTO order_items(order_id,product_id,product_name,price,quantity) VALUES(?,?,?,?,?)",
+            (oid, p["id"], p["name"], p["price"], qty)
+        )
+    conn.commit()
+    conn.close()
 
+    import urllib.parse
+    msg = urllib.parse.quote("\n".join(lines))
+    wa_url = f"https://wa.me/{WHATSAPP}?text={msg}" if WHATSAPP else ""
+    return jsonify({"order_id": oid, "total": total, "whatsapp_url": wa_url})
 
-@app.route("/status")
+@app.route("/admin/login", methods=["GET", "POST"])
+def admin_login():
+    if request.method == "POST":
+        if request.form.get("username") == ADMIN_USER and request.form.get("password") == ADMIN_PASSWORD:
+            session["admin"] = True
+            return redirect(url_for("admin_dashboard"))
+        flash("Usuário ou senha inválidos.")
+    return render_template("login.html")
+
+@app.get("/admin/logout")
+def admin_logout():
+    session.clear()
+    return redirect(url_for("admin_login"))
+
+@app.route("/admin", methods=["GET"])
+@admin_required
+def admin_dashboard():
+    conn = db()
+    products = conn.execute("SELECT * FROM products ORDER BY id DESC").fetchall()
+    orders = conn.execute("SELECT * FROM orders ORDER BY id DESC LIMIT 100").fetchall()
+    sales = conn.execute("SELECT COALESCE(SUM(total),0) FROM orders WHERE status IN ('paid','completed')").fetchone()[0]
+    conn.close()
+    return render_template("admin.html", products=products, orders=orders, sales=sales)
+
+@app.post("/admin/products")
+@admin_required
+def admin_add_product():
+    conn = db()
+    conn.execute(
+        "INSERT INTO products(name,description,price,icon) VALUES(?,?,?,?)",
+        (request.form["name"], request.form["description"], float(request.form["price"]), request.form.get("icon","🛍️"))
+    )
+    conn.commit(); conn.close()
+    return redirect(url_for("admin_dashboard"))
+
+@app.post("/admin/products/<int:pid>/toggle")
+@admin_required
+def admin_toggle_product(pid):
+    conn = db()
+    conn.execute("UPDATE products SET active=1-active WHERE id=?", (pid,))
+    conn.commit(); conn.close()
+    return redirect(url_for("admin_dashboard"))
+
+@app.post("/admin/products/<int:pid>/delete")
+@admin_required
+def admin_delete_product(pid):
+    conn = db()
+    conn.execute("DELETE FROM products WHERE id=?", (pid,))
+    conn.commit(); conn.close()
+    return redirect(url_for("admin_dashboard"))
+
+@app.post("/admin/orders/<int:oid>/status")
+@admin_required
+def admin_order_status(oid):
+    status = request.form.get("status","pending")
+    if status not in {"pending","paid","completed","cancelled"}:
+        status = "pending"
+    conn = db()
+    conn.execute("UPDATE orders SET status=? WHERE id=?", (status, oid))
+    conn.commit(); conn.close()
+    return redirect(url_for("admin_dashboard"))
+
+@app.get("/status")
 def status():
-    return {
-        "status": "online",
-        "sistema": "Oferta Play",
-        "produtos": len(PRODUTOS)
-    }
-
+    return {"status":"online","service":"Oferta Play","version":"2.0"}
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 10000))
